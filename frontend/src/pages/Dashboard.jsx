@@ -73,6 +73,14 @@ export default function Dashboard() {
             <Link className="text-link" to="/products">Search products</Link>
           </div>
         </div>
+        <div className="dashboard-card">
+          <span className="dashboard-card__icon" aria-hidden="true">▦</span>
+          <div className="dashboard-card__content">
+            <h2>Packaged food catalog</h2>
+            <p>Browse, filter and compare foods from the packaged-food dataset.</p>
+            <Link className="text-link" to="/catalog">Explore catalog</Link>
+          </div>
+        </div>
         <div className="dashboard-card dashboard-card--links">
           <div className="dashboard-card__content">
             <h2>Your product activity</h2>

@@ -54,6 +54,47 @@ Initialize the existing tables and add any schema columns needed by the current 
 
 The scripts connect using the credentials in `backend\.env`. In Workbench, refresh the `nutriscan` schema and inspect the `users`, `health_profiles`, `products`, `product_analysis_history`, `product_watchlist`, `product_ingredient_analyses`, and `product_food_claim_analyses` tables.
 
+## Indian packaged-food catalog import
+
+The catalog is kept in a dedicated `packaged_food_catalog` table. It does not reuse or alter the user-owned `products` table. The importer validates the audited CSV hash, its 25-column header, all 852 records, and the 1–852 source-row sequence before creating the catalog table or inserting rows. It accepts either `packaged_foods_india.csv` or a ZIP containing exactly one file with that name.
+
+With the backend virtual environment activated (or using its Python executable directly), run:
+
+```powershell
+Set-Location backend
+.\.venv\Scripts\python.exe scripts\import_packaged_foods.py --source "C:\path\to\packaged food.zip"
+```
+
+The import uses a single database transaction and batched inserts. Re-running the same dataset skips identical `(source_name, source_row_id, row hash)` entries; if an existing source key has changed content, it reports a conflict and leaves the stored row unchanged. It never drops, truncates, or migrates other tables. The MySQL account configured in `backend\.env` needs permission to create the catalog table and indexes and to select/insert catalog rows.
+
+Nutrition values are interpreted as per-serving-inferred, not per 100 g. Blank, nonnumeric, comma-ambiguous, and `<N` values remain visible in the raw row and are recorded as nullable parsed values with quality flags; none are silently changed to zero. Duplicate names/brands remain separate source records. Quality flags identify suspicious values for review and do not correct or discard source data.
+
+Phase 2 import verification: 852 rows inserted into `packaged_food_catalog`; the repeat import skipped all 852 identical rows; the existing `products` table count and content fingerprint were unchanged. The importer test suite and existing regression checks are summarized in `PROJECT_STATUS.md`.
+
+### Authenticated catalog API
+
+The Flask catalog endpoints use the existing JWT bearer-token authentication and read from `packaged_food_catalog` only:
+
+- `GET /api/catalog/products?page=1&per_page=20&q=oats&brand=example` — paginated listing; `q` searches product names and `brand` searches brand names.
+- `GET /api/catalog/products/<id>` — product details, ingredients, nutrition, provenance, raw source cells, and quality flags.
+- `GET /api/catalog/categories` — available category/subcategory pairs.
+- `GET /api/catalog/products/filter?category=SNACKS&calories_min=100&calories_max=250&sugar_max=10` — category and inclusive min/max filters. Nutrient ranges are available for `calories`, `sugar`, `fat`, `protein`, and `sodium`.
+
+List and filter responses include a `products` array and `pagination` object; detail responses wrap a `product` object. Nutrition is reported per the source's inferred serving basis. A requested nutrient filter excludes rows where that nutrient is `NULL`; unfiltered missing nutrient values are returned as `null`, never as zero. All endpoints require `Authorization: Bearer <JWT>`.
+
+### Dataset comparison and alternatives
+
+- `GET /api/catalog/products/compare?product_id_1=1&product_id_2=2` compares two catalog records. It returns per-serving values as stored and reports whether serving sizes and measurement bases match. Where supported, normalized per-100 g values are also returned; the response labels their basis and does not fill unavailable nutrients.
+- `GET /api/catalog/products/<id>/alternatives?limit=5` returns actual catalog records in the same category/subcategory, same category, or with a matching subcategory label. It compares available calories, sugar, saturated fat, sodium, protein, and dietary fiber, explains favorable differences and trade-offs, and identifies unavailable fields. It requires two or more comparable nutrients and at least one favorable difference.
+
+Alternative ordering uses category match and the observed pairwise comparisons; it does not calculate an overall nutrition score. The supplied FastAPI source includes an unvalidated 0–100 threshold heuristic with selected nutrient penalties and protein/fiber bonuses. NutriScan does not port or present that heuristic as an official or scientifically validated rating. Comparisons and alternatives are informational only, are not medical advice, and should not be read as a universal health assessment.
+
+### React packaged-food catalog
+
+After signing in, open **Packaged food catalog** from the dashboard. The catalog page supports product-name and brand search, category and per-serving nutrient ranges, pagination, product details, and selection of two products to compare. When text search is combined with advanced filters, the frontend searches the filtered catalog results locally because the existing filter API does not accept search terms.
+
+Product details include ingredients, available nutrition, provenance, source quality flags, and expandable original CSV values. Comparisons show serving sizes and measurement bases, warn when per-serving values are not directly comparable, and show normalized per-100 g differences only when the API supports them. Alternatives include the backend's category match, measured nutrient differences, explanations, trade-offs, and missing-data notes. Unavailable values are displayed as “Not available”; this interface does not show a nutrition score or make universal health claims.
+
 ## 3. Start the application
 
 Open two terminals from the project root.

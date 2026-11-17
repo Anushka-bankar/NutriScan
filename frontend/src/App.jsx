@@ -20,6 +20,15 @@ const ProductRecommendationsPage = lazy(
 );
 const ProductComparisonPage = lazy(() => import('./pages/ProductComparisonPage.jsx'));
 const FoodClaimsPage = lazy(() => import('./pages/FoodClaimsPage.jsx'));
+const PackagedFoodCatalogPage = lazy(
+  () => import('./pages/PackagedFoodCatalogPage.jsx'),
+);
+const PackagedFoodCatalogProductPage = lazy(
+  () => import('./pages/PackagedFoodCatalogProductPage.jsx'),
+);
+const PackagedFoodCatalogComparePage = lazy(
+  () => import('./pages/PackagedFoodCatalogComparePage.jsx'),
+);
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -91,6 +100,36 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<main className="app-loading">Preparing product comparison...</main>}>
               <ProductComparisonPage />
+            </Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/catalog"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={<main className="app-loading">Loading packaged food catalog...</main>}>
+              <PackagedFoodCatalogPage />
+            </Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/catalog/compare"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={<main className="app-loading">Preparing catalog comparison...</main>}>
+              <PackagedFoodCatalogComparePage />
+            </Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/catalog/:productId"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={<main className="app-loading">Loading catalog product...</main>}>
+              <PackagedFoodCatalogProductPage />
             </Suspense>
           </ProtectedRoute>
         }
