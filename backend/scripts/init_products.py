@@ -33,6 +33,8 @@ def main():
                 ("dietary_tags", "JSON NULL"),
                 ("barcode", "VARCHAR(14) NULL"),
                 ("ingredients", "TEXT NULL"),
+                ("packaging_text", "TEXT NULL"),
+                ("image_url", "VARCHAR(500) NULL"),
             ):
                 if name not in column_info:
                     db.session.execute(
@@ -83,6 +85,8 @@ def main():
                 "source_label",
                 "barcode",
                 "ingredients",
+                "packaging_text",
+                "image_url",
             }
             missing = required - columns
             if missing:
@@ -109,11 +113,36 @@ def main():
                 db.session.execute(
                     text("CREATE INDEX ix_products_barcode ON products (barcode)")
                 )
+            if not any(
+                index["name"] == "uq_products_user_barcode"
+                for index in inspector.get_indexes("products")
+            ):
+                duplicate_barcode = db.session.execute(
+                    text(
+                        "SELECT created_by, barcode FROM products "
+                        "WHERE barcode IS NOT NULL "
+                        "GROUP BY created_by, barcode HAVING COUNT(*) > 1 LIMIT 1"
+                    )
+                ).first()
+                if duplicate_barcode is None:
+                    db.session.execute(
+                        text(
+                            "CREATE UNIQUE INDEX uq_products_user_barcode "
+                            "ON products (created_by, barcode)"
+                        )
+                    )
+                else:
+                    logger.warning(
+                        "Existing duplicate product barcodes prevent the unique index; "
+                        "barcode imports still check for existing entries."
+                    )
 
             existing_tables = set(inspect(db.engine).get_table_names())
             expected_activity_tables = {
                 "product_analysis_history",
                 "product_watchlist",
+                "product_ingredient_analyses",
+                "product_food_claim_analyses",
             }
             if not expected_activity_tables.issubset(existing_tables):
                 db.create_all()
@@ -121,12 +150,68 @@ def main():
             for table, expected_fk in (
                 ("product_analysis_history", "products"),
                 ("product_watchlist", "products"),
+                ("product_ingredient_analyses", "products"),
+                ("product_food_claim_analyses", "products"),
             ):
                 if table not in inspector.get_table_names():
                     raise RuntimeError(f"Could not initialize {table}.")
                 foreign_keys = inspector.get_foreign_keys(table)
                 if not any(key["referred_table"] == expected_fk for key in foreign_keys):
                     raise RuntimeError(f"{table} product foreign key is missing.")
+                if table == "product_ingredient_analyses" and not any(
+                    key["referred_table"] == "users" for key in foreign_keys
+                ):
+                    raise RuntimeError(
+                        "product_ingredient_analyses user foreign key is missing."
+                    )
+                if table == "product_food_claim_analyses" and not any(
+                    key["referred_table"] == "users" for key in foreign_keys
+                ):
+                    raise RuntimeError(
+                        "product_food_claim_analyses user foreign key is missing."
+                    )
+
+            ingredient_columns = {
+                column["name"]
+                for column in inspect(db.engine).get_columns(
+                    "product_ingredient_analyses"
+                )
+            }
+            if "product_identity_snapshot" not in ingredient_columns:
+                db.session.execute(
+                    text(
+                        "ALTER TABLE product_ingredient_analyses "
+                        "ADD COLUMN product_identity_snapshot INTEGER NULL"
+                    )
+                )
+                logger.info(
+                    "Added product identity snapshots to ingredient analyses."
+                )
+            db.session.execute(
+                text(
+                    "UPDATE product_ingredient_analyses "
+                    "SET product_identity_snapshot = product_id "
+                    "WHERE product_identity_snapshot IS NULL AND product_id IS NOT NULL"
+                )
+            )
+            ingredient_indexes = {
+                index["name"]
+                for index in inspect(db.engine).get_indexes(
+                    "product_ingredient_analyses"
+                )
+            }
+            identity_index = (
+                "ix_product_ingredient_analyses_product_identity_snapshot"
+            )
+            if identity_index not in ingredient_indexes:
+                db.session.execute(
+                    text(
+                        "CREATE INDEX "
+                        f"{identity_index} ON product_ingredient_analyses "
+                        "(product_identity_snapshot)"
+                    )
+                )
+            db.session.commit()
 
             watchlist_constraints = inspector.get_unique_constraints(
                 "product_watchlist"
@@ -144,7 +229,9 @@ def main():
                     )
                 )
             db.session.execute(text("SELECT 1"))
-            logger.info("Product, history, and watchlist tables are ready in MySQL.")
+            logger.info(
+                "Product, activity, and ingredient comparison tables are ready in MySQL."
+            )
     except SQLAlchemyError:
         db.session.rollback()
         logger.exception("Could not initialize product nutrition storage in MySQL.")

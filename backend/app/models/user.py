@@ -41,3 +41,13 @@ class User(db.Model):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    ingredient_analyses = db.relationship(
+        "ProductIngredientAnalysis",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    food_claim_analyses = db.relationship(
+        "ProductFoodClaimAnalysis",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )

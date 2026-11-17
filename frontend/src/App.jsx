@@ -11,10 +11,15 @@ import ProductWatchlistPage from './pages/ProductWatchlistPage.jsx';
 
 const ProductScanPage = lazy(() => import('./pages/ProductScanPage.jsx'));
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage.jsx'));
+const IngredientAnalysisPage = lazy(() => import('./pages/IngredientAnalysisPage.jsx'));
+const IngredientHistoryComparisonPage = lazy(
+  () => import('./pages/IngredientHistoryComparisonPage.jsx'),
+);
 const ProductRecommendationsPage = lazy(
   () => import('./pages/ProductRecommendationsPage.jsx'),
 );
 const ProductComparisonPage = lazy(() => import('./pages/ProductComparisonPage.jsx'));
+const FoodClaimsPage = lazy(() => import('./pages/FoodClaimsPage.jsx'));
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -86,6 +91,36 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<main className="app-loading">Preparing product comparison...</main>}>
               <ProductComparisonPage />
+            </Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/ingredient-history"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={<main className="app-loading">Loading ingredient history...</main>}>
+              <IngredientHistoryComparisonPage />
+            </Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/products/:productId/ingredients"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={<main className="app-loading">Preparing ingredient analysis...</main>}>
+              <IngredientAnalysisPage />
+            </Suspense>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/products/:productId/claims"
+        element={
+          <ProtectedRoute>
+            <Suspense fallback={<main className="app-loading">Preparing packaging claim analysis...</main>}>
+              <FoodClaimsPage />
             </Suspense>
           </ProtectedRoute>
         }

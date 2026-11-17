@@ -25,3 +25,20 @@ export const removeWatchlistEntry = (entryId) =>
   api.delete(`/watchlist/entries/${entryId}`);
 export const compareProducts = (productIds) =>
   api.get('/products/compare', { params: { ids: productIds.join(',') } });
+export const getLatestIngredientAnalysis = (productId) =>
+  api.get(`/products/${productId}/ingredients/latest`);
+export const analyzeIngredients = (productId, ingredients) =>
+  api.post(`/products/${productId}/ingredients/analyze`, { ingredients });
+export const getIngredientAnalysisHistory = () =>
+  api.get('/products/ingredients/history');
+export const compareIngredientAnalyses = (olderAnalysisId, newerAnalysisId) =>
+  api.post('/products/ingredients/compare', {
+    older_analysis_id: olderAnalysisId,
+    newer_analysis_id: newerAnalysisId,
+  });
+export const analyzeFoodClaims = (productId, claimText) =>
+  api.post(`/products/${productId}/claims/analyze`, { claim_text: claimText });
+export const getFoodClaimHistory = (productId) =>
+  api.get('/products/claims/history', {
+    params: productId ? { product_id: productId } : {},
+  });

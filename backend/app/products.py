@@ -2,11 +2,12 @@ from decimal import Decimal, InvalidOperation
 import json
 import re
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from flask import Blueprint, current_app, g, jsonify, request
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.auth import token_required
 from app.extensions import db
@@ -30,7 +31,8 @@ PRODUCT_INPUT_FIELDS = tuple(NUTRIENT_FIELDS)
 BARCODE_PATTERN = re.compile(r"^(?:\d{8}|\d{12,14})$")
 OPEN_FOOD_FACTS_FIELDS = (
     "product_name,product_name_en,brands,quantity,serving_size,ingredients_text,"
-    "ingredients_text_en,nutriments,categories_tags,ingredients_analysis_tags"
+    "ingredients_text_en,image_url,image_front_url,nutriments,categories_tags,"
+    "ingredients_analysis_tags"
 )
 
 
@@ -70,6 +72,22 @@ def _off_category(tags):
         if any(token in normalized for token in tokens):
             return category
     return "other"
+
+
+def _safe_off_image(product):
+    image = product.get("image_url") or product.get("image_front_url")
+    if not isinstance(image, str) or len(image) > 500:
+        return None
+    try:
+        parsed = urlparse(image)
+    except ValueError:
+        return None
+    if parsed.scheme != "https" or parsed.hostname not in {
+        "images.openfoodfacts.org",
+        "static.openfoodfacts.org",
+    }:
+        return None
+    return image
 
 
 def _off_dietary_tags(tags):
@@ -138,10 +156,8 @@ def _open_food_facts_product(barcode):
     if not isinstance(nutriments, dict):
         nutriments = {}
     name = source.get("product_name") or source.get("product_name_en") or ""
-    if not isinstance(name, str) or not name.strip():
-        raise ProductLookupError(
-            "This barcode entry has no product name. Scan the nutrition label instead."
-        )
+    if not isinstance(name, str):
+        name = ""
     brands = source.get("brands")
     if not isinstance(brands, str):
         brands = ""
@@ -176,16 +192,12 @@ def _open_food_facts_product(barcode):
             else None
         ),
     }
-    if all(value is None for value in facts.values()):
-        raise ProductLookupError(
-            "This barcode entry has no usable nutrition facts. Scan the package label instead."
-        )
-
     return {
         "barcode": barcode,
         "name": name.strip()[:160],
         "brand": brands.strip()[:120] or None,
         "ingredients": ingredients.strip()[:10000] or None,
+        "image_url": _safe_off_image(source),
         "category": _off_category(category_tags),
         "dietary_tags": _off_dietary_tags(dietary_tags),
         "serving_size_g": _serving_grams(source.get("serving_size")),
@@ -205,6 +217,17 @@ def _save_scanned_product(user_id, values, source_type, source_label):
     return product
 
 
+def _existing_barcode_product(user_id, barcode):
+    if not barcode:
+        return None
+    return db.session.execute(
+        select(Product).where(
+            Product.created_by == user_id,
+            Product.barcode == barcode,
+        ).order_by(Product.id.asc()).limit(1)
+    ).scalar_one_or_none()
+
+
 def _decimal(value, field, maximum):
     try:
         result = Decimal(str(value))
@@ -215,11 +238,13 @@ def _decimal(value, field, maximum):
     return result.quantize(Decimal("0.01"))
 
 
-def validate_product(body):
+def validate_product(body, require_nutrition=True, require_name=True):
     name = body.get("name")
     brand = body.get("brand", "")
-    if not isinstance(name, str) or not name.strip() or len(name.strip()) > 160:
+    if not isinstance(name, str) or (require_name and not name.strip()) or len(name.strip()) > 160:
         return None, "Product name is required and must be at most 160 characters."
+    if brand is None:
+        brand = ""
     if not isinstance(brand, str) or len(brand.strip()) > 120:
         return None, "Brand must be at most 120 characters."
     ingredients = body.get("ingredients")
@@ -227,6 +252,19 @@ def validate_product(body):
         not isinstance(ingredients, str) or len(ingredients) > 10000
     ):
         return None, "Ingredients must be text of at most 10000 characters."
+    packaging_text = body.get("packaging_text")
+    if packaging_text is not None and (
+        not isinstance(packaging_text, str) or len(packaging_text) > 20000
+    ):
+        return None, "Packaging text must be text of at most 20000 characters."
+    image_url = body.get("image_url")
+    if image_url is not None and (
+        not isinstance(image_url, str)
+        or len(image_url) > 500
+        or not image_url.startswith("https://")
+        or _safe_off_image({"image_url": image_url}) is None
+    ):
+        return None, "Product image must be an HTTPS Open Food Facts image URL."
     barcode = body.get("barcode")
     if barcode is not None and not BARCODE_PATTERN.fullmatch(str(barcode)):
         return None, "Enter a valid 8, 12, 13, or 14-digit product barcode."
@@ -256,7 +294,7 @@ def validate_product(body):
             values[field] = _decimal(body[field], label, maximum)
         except ValueError as exc:
             return None, str(exc)
-    if all(value is None for value in values.values()):
+    if require_nutrition and all(value is None for value in values.values()):
         return None, "Enter at least one available nutrition value."
     if (
         values["sugars_g"] is not None
@@ -286,6 +324,8 @@ def validate_product(body):
         "brand": brand.strip() or None,
         "barcode": str(barcode) if barcode is not None else None,
         "ingredients": ingredients.strip() or None if ingredients else None,
+        "packaging_text": packaging_text.strip() or None if packaging_text else None,
+        "image_url": image_url,
         "category": category,
         "dietary_tags": sorted(set(dietary_tags)),
         "serving_size_g": serving_size,
@@ -293,7 +333,7 @@ def validate_product(body):
     }, None
 
 
-def _product_json(product):
+def _product_json(product, include_packaging_text=False):
     per_100g = {
         field: float(getattr(product, field)) if getattr(product, field) is not None else None
         for field in PRODUCT_INPUT_FIELDS
@@ -311,6 +351,12 @@ def _product_json(product):
         "brand": product.brand,
         "barcode": product.barcode,
         "ingredients": product.ingredients,
+        **(
+            {"packaging_text": product.packaging_text}
+            if include_packaging_text
+            else {}
+        ),
+        "image_url": product.image_url,
         "category": product.category,
         "category_label": PRODUCT_CATEGORIES.get(product.category, "Uncategorized"),
         "dietary_tags": product.dietary_tags or [],
@@ -375,10 +421,23 @@ def create_product():
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         return jsonify({"message": "A JSON object is required."}), 400
+    if body.get("packaging_text") not in (None, ""):
+        return jsonify(
+            {"message": "Package OCR text can only be saved through the OCR import."}
+        ), 400
 
     values, error = validate_product(body)
     if error:
         return jsonify({"message": error}), 400
+    existing = _existing_barcode_product(g.current_user.id, values["barcode"])
+    if existing is not None:
+        return jsonify(
+            {
+                "message": "A product with this barcode is already in your library.",
+                "product": _product_json(existing),
+                "already_saved": True,
+            }
+        ), 200
 
     product = Product(
         created_by=g.current_user.id,
@@ -399,9 +458,23 @@ def create_product():
 @products_bp.get("/lookup/barcode/<barcode>")
 @token_required
 def lookup_barcode(barcode):
+    if not BARCODE_PATTERN.fullmatch(barcode):
+        return jsonify({"message": "Enter a valid product barcode."}), 400
+    existing = _existing_barcode_product(g.current_user.id, barcode)
+    if existing is not None:
+        return jsonify(
+            {
+                "product": None,
+                "existing_product": _product_json(existing),
+            }
+        )
     try:
         product = _open_food_facts_product(barcode)
-        validated, validation_error = validate_product(product)
+        validated, validation_error = validate_product(
+            product,
+            require_nutrition=False,
+            require_name=False,
+        )
         if validation_error:
             raise ProductLookupError(
                 "The barcode entry has inconsistent nutrition data. Scan the package label instead."
@@ -416,9 +489,10 @@ def lookup_barcode(barcode):
                     **response_product,
                     "source_type": "open_food_facts",
                     "source_label": (
-                        "Open Food Facts community data; may be incomplete or unverified"
+                        "Open Food Facts community data; review before saving"
                     ),
-                }
+                },
+                "existing_product": None,
             }
         )
     except ValueError as exc:
@@ -438,7 +512,19 @@ def import_barcode_product():
     if not isinstance(body, dict):
         return jsonify({"message": "A JSON object is required."}), 400
     try:
-        values = _open_food_facts_product(body.get("barcode"))
+        barcode = body.get("barcode")
+        if not isinstance(barcode, str) or not BARCODE_PATTERN.fullmatch(barcode):
+            raise ValueError("Enter a valid product barcode.")
+        existing = _existing_barcode_product(g.current_user.id, barcode)
+        if existing is not None:
+            return jsonify(
+                {
+                    "message": "This barcode is already in your product library.",
+                    "product": _product_json(existing),
+                    "already_saved": True,
+                }
+            ), 200
+        values = _open_food_facts_product(barcode)
     except ValueError as exc:
         return jsonify({"message": str(exc)}), 400
     except ProductNotFoundError as exc:
@@ -450,7 +536,24 @@ def import_barcode_product():
     if category not in PRODUCT_CATEGORIES:
         return jsonify({"message": "Choose a valid product category."}), 400
     values["category"] = category
-    values, validation_error = validate_product(values)
+    reviewed = body.get("reviewed_product")
+    if reviewed is not None:
+        if not isinstance(reviewed, dict):
+            return jsonify({"message": "Reviewed product details must be an object."}), 400
+        reviewed = {**values, **reviewed, "barcode": barcode}
+        reviewed_values, validation_error = validate_product(
+            reviewed,
+            require_nutrition=False,
+        )
+        if validation_error:
+            return jsonify({"message": validation_error}), 400
+        if reviewed_values["packaging_text"] is not None:
+            return jsonify(
+                {"message": "Package OCR text can only be saved through the OCR import."}
+            ), 400
+        values = reviewed_values
+        values["category"] = category
+    values, validation_error = validate_product(values, require_nutrition=False)
     if validation_error:
         return jsonify(
             {
@@ -460,14 +563,43 @@ def import_barcode_product():
                 )
             }
         ), 502
+    review_confirmed = (
+        isinstance(reviewed, dict) and reviewed.get("review_confirmed") is True
+    ) or body.get("review_confirmed") is True
+    if (
+        values["serving_size_g"] is not None
+        and (values["serving_size_g"] < 1 or values["serving_size_g"] > 1000)
+        and not review_confirmed
+    ):
+        return jsonify(
+            {
+                "message": (
+                    "Serving size looks unusual. Verify it and confirm the review "
+                    "before saving."
+                )
+            }
+        ), 400
     try:
         product = _save_scanned_product(
             g.current_user.id,
             values,
             "open_food_facts",
-            "Open Food Facts community data; may be incomplete or unverified",
+            "Open Food Facts community data; user-reviewed, not independently verified",
         )
         return jsonify({"product": _product_json(product)}), 201
+    except IntegrityError:
+        db.session.rollback()
+        existing = _existing_barcode_product(g.current_user.id, barcode)
+        if existing is not None:
+            return jsonify(
+                {
+                    "message": "This barcode is already in your product library.",
+                    "product": _product_json(existing),
+                    "already_saved": True,
+                }
+            ), 200
+        current_app.logger.exception("Could not save barcode product.")
+        return jsonify({"message": "Could not save product. Please try again."}), 500
     except SQLAlchemyError:
         db.session.rollback()
         current_app.logger.exception("Could not save barcode product.")
@@ -487,6 +619,29 @@ def import_ocr_product():
         return jsonify({"message": error}), 400
     if values["category"] is None:
         return jsonify({"message": "Choose a food category before saving."}), 400
+    existing = _existing_barcode_product(g.current_user.id, values["barcode"])
+    if existing is not None:
+        return jsonify(
+            {
+                "message": "A product with this barcode is already in your library.",
+                "product": _product_json(existing),
+                "already_saved": True,
+            }
+        ), 200
+    serving_size = values["serving_size_g"]
+    if (
+        serving_size is not None
+        and (serving_size < 1 or serving_size > 1000)
+        and body.get("review_confirmed") is not True
+    ):
+        return jsonify(
+            {
+                "message": (
+                    "Serving size looks unusual. Verify it and confirm the review "
+                    "before saving."
+                )
+            }
+        ), 400
     try:
         product = _save_scanned_product(
             g.current_user.id,
@@ -507,7 +662,7 @@ def get_product(product_id):
     product = _owned_or_404(product_id)
     if product is None:
         return jsonify({"message": "Product not found."}), 404
-    return jsonify({"product": _product_json(product)})
+    return jsonify({"product": _product_json(product, include_packaging_text=True)})
 
 
 @products_bp.patch("/<int:product_id>/classification")

@@ -69,6 +69,9 @@ export default function ProductSearchPage() {
       </header>
 
       <section className="product-content">
+        <Link className="product-back-link" to="/">
+          <span aria-hidden="true">←</span> Back to dashboard
+        </Link>
         <div className="product-page__intro">
           <p className="eyebrow">Make informed choices</p>
           <h1>Product nutrition</h1>

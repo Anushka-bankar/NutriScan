@@ -3,6 +3,7 @@ import sys
 import unittest
 import uuid
 from pathlib import Path
+from urllib.error import URLError
 from unittest.mock import patch
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -152,6 +153,7 @@ class ProductNutritionMySQLTests(unittest.TestCase):
                 "brands": "Scan Foods",
                 "serving_size": "30 g",
                 "ingredients_text": "Whole grain oats, raisins",
+                "image_url": "https://images.openfoodfacts.org/images/products/123/456/789/0123/front_en.3.400.jpg",
                 "categories_tags": ["en:breakfast-cereals"],
                 "ingredients_analysis_tags": ["en:vegan"],
                 "nutriments": {
@@ -188,31 +190,75 @@ class ProductNutritionMySQLTests(unittest.TestCase):
         self.assertEqual(lookup_product["dietary_tags"], ["vegan", "vegetarian"])
         self.assertEqual(lookup_product["sodium_mg"], 200)
         self.assertEqual(lookup_product["ingredients"], "Whole grain oats, raisins")
+        self.assertEqual(
+            lookup_product["image_url"],
+            provider_product["product"]["image_url"],
+        )
         self.assertIn("community data", lookup_product["source_label"])
 
         with patch("app.products.urlopen", return_value=FakeResponse()):
             imported = self.client.post(
                 "/api/products/import/barcode",
-                json={"barcode": "1234567890123"},
+                json={
+                    "barcode": "1234567890123",
+                    "category": "grains_cereals",
+                    "reviewed_product": {
+                        "name": "Reviewed breakfast cereal",
+                        "brand": "My package says Scan Foods",
+                        "ingredients": "Whole grain oats",
+                        "calories_kcal": 351,
+                    },
+                },
                 headers=auth,
             )
         self.assertEqual(imported.status_code, 201, imported.get_json())
         saved = imported.get_json()["product"]
         self.assertEqual(saved["source_type"], "open_food_facts")
         self.assertEqual(saved["barcode"], "1234567890123")
-        self.assertEqual(saved["nutrition_per_serving"]["calories_kcal"], 105)
+        self.assertEqual(saved["name"], "Reviewed breakfast cereal")
+        self.assertEqual(saved["brand"], "My package says Scan Foods")
+        self.assertEqual(saved["ingredients"], "Whole grain oats")
+        self.assertEqual(saved["nutrition_per_100g"]["calories_kcal"], 351)
+        self.assertEqual(saved["image_url"], provider_product["product"]["image_url"])
+        self.assertIn("user-reviewed", saved["source_label"])
+        self.assertEqual(saved["nutrition_per_serving"]["calories_kcal"], 105.3)
+        duplicate = self.client.post(
+            "/api/products/import/barcode",
+            json={"barcode": "1234567890123", "category": "grains_cereals"},
+            headers=auth,
+        )
+        self.assertEqual(duplicate.status_code, 200, duplicate.get_json())
+        self.assertTrue(duplicate.get_json()["already_saved"])
+        self.assertEqual(duplicate.get_json()["product"]["id"], saved["id"])
+        with patch("app.products.urlopen", side_effect=AssertionError("unexpected provider call")):
+            existing_lookup = self.client.get(
+                "/api/products/lookup/barcode/1234567890123", headers=auth
+            )
+        self.assertEqual(existing_lookup.status_code, 200, existing_lookup.get_json())
+        self.assertEqual(
+            existing_lookup.get_json()["existing_product"]["id"],
+            saved["id"],
+        )
         self.assertEqual(
             self.client.get(
                 f"/api/products/{saved['id']}", headers=other_auth
             ).status_code,
             404,
         )
+        with patch("app.products.urlopen", return_value=FakeResponse()):
+            other_owner_import = self.client.post(
+                "/api/products/import/barcode",
+                json={"barcode": "1234567890123", "category": "grains_cereals"},
+                headers=other_auth,
+            )
+        self.assertEqual(other_owner_import.status_code, 201, other_owner_import.get_json())
+        self.assertNotEqual(other_owner_import.get_json()["product"]["id"], saved["id"])
 
         ocr = self.client.post(
             "/api/products/import/ocr",
             json={
                 "name": "OCR test cereal",
-                "brand": "Package label",
+                "brand": None,
                 "category": "grains_cereals",
                 "barcode": "12345670",
                 "ingredients": "Oats, seeds",
@@ -227,8 +273,48 @@ class ProductNutritionMySQLTests(unittest.TestCase):
         self.assertEqual(ocr.status_code, 201, ocr.get_json())
         ocr_product = ocr.get_json()["product"]
         self.assertEqual(ocr_product["source_type"], "label_ocr")
+        self.assertIsNone(ocr_product["brand"])
         self.assertEqual(ocr_product["ingredients"], "Oats, seeds")
         self.assertEqual(ocr_product["nutrition_per_serving"]["calories_kcal"], 128)
+
+        invalid_serving = self.client.post(
+            "/api/products/import/ocr",
+            json={
+                "name": "Invalid serving scan",
+                "brand": None,
+                "category": "grains_cereals",
+                "serving_size_g": 0,
+                "calories_kcal": 300,
+            },
+            headers=auth,
+        )
+        self.assertEqual(invalid_serving.status_code, 400)
+        self.assertIn("Serving size", invalid_serving.get_json()["message"])
+        suspicious_serving = self.client.post(
+            "/api/products/import/ocr",
+            json={
+                "name": "Suspicious serving scan",
+                "brand": None,
+                "category": "grains_cereals",
+                "serving_size_g": 0.5,
+                "calories_kcal": 300,
+            },
+            headers=auth,
+        )
+        self.assertEqual(suspicious_serving.status_code, 400)
+        confirmed_serving = self.client.post(
+            "/api/products/import/ocr",
+            json={
+                "name": "Reviewed serving scan",
+                "brand": None,
+                "category": "grains_cereals",
+                "serving_size_g": 0.5,
+                "calories_kcal": 300,
+                "review_confirmed": True,
+            },
+            headers=auth,
+        )
+        self.assertEqual(confirmed_serving.status_code, 201)
 
         invalid_barcode = self.client.get(
             "/api/products/lookup/barcode/invalid", headers=auth
@@ -247,7 +333,7 @@ class ProductNutritionMySQLTests(unittest.TestCase):
             )(),
         ):
             missing_product = self.client.get(
-                "/api/products/lookup/barcode/12345670", headers=auth
+                "/api/products/lookup/barcode/12345671", headers=auth
             )
         self.assertEqual(missing_product.status_code, 404)
         self.assertEqual(
@@ -258,6 +344,95 @@ class ProductNutritionMySQLTests(unittest.TestCase):
             ).status_code,
             400,
         )
+        with patch("app.products.urlopen", side_effect=URLError("network unavailable")):
+            network_failure = self.client.get(
+                "/api/products/lookup/barcode/1111111111111", headers=auth
+            )
+        self.assertEqual(network_failure.status_code, 502)
+        self.assertIn("Could not reach", network_failure.get_json()["message"])
+
+        incomplete = {
+            "status": 1,
+            "product": {
+                "product_name": "",
+                "brands": "",
+                "categories_tags": [],
+                "nutriments": {},
+            },
+        }
+        with patch(
+            "app.products.urlopen",
+            return_value=type(
+                "IncompleteResponse",
+                (),
+                {
+                    "__enter__": lambda self: self,
+                    "__exit__": lambda self, *_args: False,
+                    "read": lambda self, _limit: json.dumps(incomplete).encode(),
+                },
+            )(),
+        ):
+            incomplete_lookup = self.client.get(
+                "/api/products/lookup/barcode/987654321098", headers=auth
+            )
+        self.assertEqual(incomplete_lookup.status_code, 200, incomplete_lookup.get_json())
+        incomplete_product = incomplete_lookup.get_json()["product"]
+        self.assertEqual(incomplete_product["name"], "")
+        self.assertIsNone(incomplete_product["calories_kcal"])
+        self.assertIsNone(incomplete_product["image_url"])
+        self.assertIsNone(incomplete_product["serving_size_g"])
+
+        with patch(
+            "app.products.urlopen",
+            return_value=type(
+                "IncompleteResponse",
+                (),
+                {
+                    "__enter__": lambda self: self,
+                    "__exit__": lambda self, *_args: False,
+                    "read": lambda self, _limit: json.dumps(incomplete).encode(),
+                },
+            )(),
+        ):
+            incomplete_import = self.client.post(
+                "/api/products/import/barcode",
+                json={
+                    "barcode": "987654321098",
+                    "reviewed_product": {
+                        "name": "Name read from the package",
+                        "category": "other",
+                    },
+                },
+                headers=auth,
+            )
+        self.assertEqual(incomplete_import.status_code, 201, incomplete_import.get_json())
+        missing_facts = incomplete_import.get_json()["product"]["nutrition_per_100g"]
+        self.assertTrue(all(value is None for value in missing_facts.values()))
+
+        with patch(
+            "app.products._open_food_facts_product",
+            return_value={
+                "barcode": "1111111111111",
+                "name": "Small serving package",
+                "category": "other",
+                "serving_size_g": 30,
+                "calories_kcal": 300,
+            },
+        ):
+            suspicious_import = self.client.post(
+                "/api/products/import/barcode",
+                json={
+                    "barcode": "1111111111111",
+                    "reviewed_product": {
+                        "name": "Small serving package",
+                        "category": "other",
+                        "serving_size_g": 0.5,
+                        "calories_kcal": 300,
+                    },
+                },
+                headers=auth,
+            )
+        self.assertEqual(suspicious_import.status_code, 400)
 
 
 if __name__ == "__main__":

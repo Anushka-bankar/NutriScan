@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getHealthProfile } from '../api/auth.js';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { getBmiCategoryLabel } from '../utils/bmi.js';
 
 export default function Dashboard() {
   const { user, signOut } = useAuth();
@@ -55,7 +56,7 @@ export default function Dashboard() {
             <div className="dashboard-card__content">
               <h2>Your profile is ready</h2>
               <p>
-                BMI {profile.bmi.value} · {profile.bmi.label}
+                BMI {profile.bmi.value} · {getBmiCategoryLabel(profile.bmi.category) || profile.bmi.label}
                 {profile.daily_calories
                   ? ` · ${profile.daily_calories.minimum.toLocaleString()}–${profile.daily_calories.maximum.toLocaleString()} kcal/day estimated`
                   : ''}

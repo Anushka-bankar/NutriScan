@@ -96,6 +96,7 @@ export default function ProductHistoryPage() {
           <span>NutriScan</span>
         </Link>
         <Link className="button button--quiet" to="/products">Product search</Link>
+        <Link className="button button--outline" to="/ingredient-history">Ingredient history</Link>
       </header>
       <section className="product-content product-content--detail">
         <div className="product-page__intro">

@@ -17,6 +17,8 @@ class Product(db.Model):
     brand = db.Column(db.String(120), nullable=True)
     barcode = db.Column(db.String(14), nullable=True, index=True)
     ingredients = db.Column(db.Text, nullable=True)
+    packaging_text = db.Column(db.Text, nullable=True)
+    image_url = db.Column(db.String(500), nullable=True)
     category = db.Column(db.String(50), nullable=True, index=True)
     dietary_tags = db.Column(db.JSON, nullable=True)
     serving_size_g = db.Column(db.Numeric(7, 2), nullable=True)
@@ -46,3 +48,22 @@ class Product(db.Model):
     owner = db.relationship("User", back_populates="products")
     analysis_history = db.relationship("ProductAnalysisHistory", back_populates="product")
     watchlist_entries = db.relationship("ProductWatchlist", back_populates="product")
+    ingredient_analyses = db.relationship(
+        "ProductIngredientAnalysis",
+        back_populates="product",
+        passive_deletes=True,
+    )
+    food_claim_analyses = db.relationship(
+        "ProductFoodClaimAnalysis",
+        back_populates="product",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        db.Index(
+            "uq_products_user_barcode",
+            "created_by",
+            "barcode",
+            unique=True,
+        ),
+    )

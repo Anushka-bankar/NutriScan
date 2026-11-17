@@ -686,6 +686,65 @@ a {
   color: #6d776f;
 }
 
+.bmi-category-guide {
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px solid #e5ebe5;
+  border-radius: 10px;
+  background: #f9fbf9;
+}
+
+.bmi-category-guide h3 {
+  margin: 0;
+  color: #35463a;
+  font-size: 13px;
+}
+
+.bmi-category-guide__current {
+  margin: 7px 0 12px;
+  color: #56665b;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.bmi-category-guide ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bmi-category-guide__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #68756c;
+  font-size: 11px;
+}
+
+.bmi-category-guide__row strong {
+  color: #425247;
+}
+
+.bmi-category-guide__row--current {
+  border-color: #b7caba;
+  background: #edf4ee;
+  color: #405c48;
+}
+
+.bmi-category-guide__badge {
+  color: #426e4e;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: right;
+}
+
 .bmi-scale {
   margin-top: 24px;
 }
@@ -777,6 +836,28 @@ a {
 .product-content--form,
 .product-content--detail {
   width: min(100%, 1000px);
+}
+
+.product-back-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #52675a;
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.product-back-link:hover {
+  text-decoration: underline;
+}
+
+.product-back-link:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--sage);
+  outline-offset: 3px;
 }
 
 .product-page__intro {
@@ -1160,6 +1241,59 @@ a {
   border-top: 1px solid #edf0ed;
 }
 
+.ocr-review-alert {
+  margin: 18px 0;
+  padding: 15px 17px;
+  border: 1px solid #ead8a8;
+  border-radius: 9px;
+  background: #fffaf0;
+  color: #665523;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ocr-review-alert strong {
+  color: #594510;
+  font-size: 13px;
+}
+
+.ocr-review-alert ul {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+  padding-left: 19px;
+}
+
+.ocr-review-alert p {
+  margin: 8px 0 0;
+}
+
+.product-entry-form .field .field--needs-review,
+.scan-ingredients-field .field--needs-review {
+  border-color: #c99e45;
+  background: #fffaf0;
+  box-shadow: 0 0 0 2px rgb(201 158 69 / 12%);
+}
+
+.ocr-review-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 13px;
+  border: 1px solid #e5ebe5;
+  border-radius: 9px;
+  color: #46564b;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ocr-review-confirm input {
+  margin-top: 3px;
+  accent-color: var(--sage);
+}
+
 .scan-review__heading {
   display: flex;
   align-items: flex-start;
@@ -1179,6 +1313,40 @@ a {
   color: #748078;
   font-size: 13px;
   line-height: 1.55;
+}
+
+.barcode-product-image {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 18px;
+  color: #748078;
+  font-size: 12px;
+}
+
+.barcode-product-image img {
+  width: 82px;
+  height: 82px;
+  border: 1px solid #e5ebe5;
+  border-radius: 9px;
+  background: #fff;
+  object-fit: contain;
+}
+
+.scan-identity .field:first-child {
+  grid-column: auto;
+}
+
+.scan-ingredients-field textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 11px;
+  border: 1px solid #dfe6e0;
+  border-radius: 8px;
+  color: #34443a;
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
 }
 
 .scan-review > h3,
@@ -1345,6 +1513,637 @@ a {
   margin: 5px 0 10px;
   color: #35463a;
   font-size: 18px;
+}
+
+.ingredients-panel__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.ingredients-panel__heading .button {
+  flex: 0 0 auto;
+}
+
+.ingredient-page {
+  max-width: 900px;
+}
+
+.ingredient-method-note {
+  margin: 20px 0;
+}
+
+.ingredient-input-panel {
+  display: grid;
+  gap: 13px;
+  padding: 22px;
+  border: 1px solid #e5ebe5;
+  border-radius: 12px;
+  background: white;
+}
+
+.ingredient-input-panel .field {
+  display: grid;
+  gap: 8px;
+}
+
+.ingredient-input-panel textarea {
+  width: 100%;
+  min-height: 132px;
+  padding: 12px;
+  border: 1px solid #dfe6e0;
+  border-radius: 8px;
+  color: #34443a;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.65;
+  resize: vertical;
+}
+
+.ingredient-input-panel textarea:focus {
+  border-color: var(--sage);
+  outline: 0;
+  box-shadow: 0 0 0 3px rgb(100 139 114 / 12%);
+}
+
+.ingredient-analysis-results {
+  margin-top: 27px;
+}
+
+.food-claims-page {
+  max-width: 1000px;
+}
+
+.food-claims-input {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 21px;
+  border: 1px solid #e5ebe5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.food-claims-input .field {
+  display: grid;
+  gap: 8px;
+}
+
+.food-claims-input textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 12px;
+  border: 1px solid #dfe6e0;
+  border-radius: 8px;
+  color: #34443a;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.65;
+  resize: vertical;
+}
+
+.food-claims-input textarea:focus {
+  border-color: var(--sage);
+  outline: 0;
+  box-shadow: 0 0 0 3px rgb(100 139 114 / 12%);
+}
+
+.food-claims-results {
+  margin-top: 28px;
+}
+
+.food-claims-results__heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.food-claims-results__heading h2,
+.food-claim-history h2 {
+  margin: 5px 0 0;
+  color: #35463a;
+  font-size: 22px;
+}
+
+.food-claims-results__heading time,
+.food-claim-history time {
+  color: #748078;
+  font-size: 12px;
+}
+
+.food-claim-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.food-claim-summary > div {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid #e5ebe5;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.food-claim-summary strong {
+  color: #405b47;
+  font-size: 21px;
+}
+
+.food-claim-summary span {
+  color: #748078;
+  font-size: 12px;
+}
+
+.food-claim-list {
+  display: grid;
+  gap: 13px;
+  margin-top: 18px;
+}
+
+.food-claim-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e5ebe5;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.food-claim-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.food-claim-card__header .eyebrow {
+  margin: 0 0 5px;
+}
+
+.food-claim-card__header h3 {
+  margin: 0;
+  color: #35463a;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.food-claim-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #edf2ed;
+  color: #405b47;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.food-claim-status--potentially_inconsistent {
+  background: #fff1e9;
+  color: #8d4e2c;
+}
+
+.food-claim-status--unverifiable {
+  background: #f4f1e9;
+  color: #75643c;
+}
+
+.food-claim-card__explanation,
+.food-claim-card__criteria {
+  color: #56645a;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.food-claim-evidence {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+}
+
+.food-claim-evidence > div {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.6fr) minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #f7f9f6;
+  font-size: 12px;
+}
+
+.food-claim-evidence dt {
+  color: #68766d;
+}
+
+.food-claim-evidence dd {
+  margin: 0;
+  color: #405047;
+  overflow-wrap: anywhere;
+}
+
+.food-claim-references {
+  margin: 13px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.food-claim-context {
+  margin: 15px 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--sage);
+  background: #f3f6f2;
+  color: #46564b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.food-claim-context p {
+  margin: 0;
+}
+
+.food-claim-history {
+  margin-top: 28px;
+}
+
+.food-claim-history ul {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.food-claim-history li {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e5ebe5;
+  border-radius: 9px;
+  background: white;
+  color: #56645a;
+  font-size: 12px;
+}
+
+.ingredients-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.ingredient-comparison-page {
+  max-width: 1100px;
+}
+
+.ingredient-comparison-form {
+  display: grid;
+  gap: 16px;
+  margin: 22px 0;
+  padding: 22px;
+  border: 1px solid #e5ebe5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.ingredient-comparison-form .field {
+  display: grid;
+  gap: 8px;
+}
+
+.ingredient-comparison-selectors,
+.ingredient-comparison-dates,
+.ingredient-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ingredient-comparison-dates {
+  margin-bottom: 20px;
+}
+
+.ingredient-comparison-dates article,
+.ingredient-diff-section {
+  min-width: 0;
+  padding: 17px;
+  border: 1px solid #e5ebe5;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.ingredient-comparison-dates h2 {
+  margin: 4px 0;
+  color: #35463a;
+  font-size: 17px;
+}
+
+.ingredient-comparison-dates time {
+  color: #748078;
+  font-size: 12px;
+}
+
+.ingredient-comparison-grid {
+  margin-bottom: 14px;
+}
+
+.ingredient-legacy-history {
+  margin: 18px 0;
+}
+
+.ingredient-diff-section h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  color: #35463a;
+  font-size: 16px;
+}
+
+.ingredient-diff-section h2 span {
+  display: inline-grid;
+  min-width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef3ee;
+  color: #405b47;
+  font-size: 12px;
+}
+
+.ingredient-diff-list {
+  display: grid;
+  gap: 9px;
+  margin: 15px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ingredient-diff-list > li {
+  display: grid;
+  gap: 4px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  background: #f7f9f6;
+  color: #45554a;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.ingredient-diff-list > li > span,
+.ingredient-diff-empty {
+  color: #748078;
+  font-size: 12px;
+}
+
+.ingredient-diff-empty {
+  margin: 14px 0 0;
+}
+
+.ingredient-change-detail {
+  grid-template-columns: 1fr;
+}
+
+.ingredient-field-changes {
+  display: grid;
+  gap: 7px;
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ingredient-field-changes li {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.6fr) minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  color: #657268;
+  font-size: 12px;
+}
+
+.ingredient-field-changes strong {
+  color: #45554a;
+  text-transform: capitalize;
+}
+
+.ingredient-comparison-source {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #e5ebe5;
+  border-radius: 10px;
+  background: #fff;
+  color: #45554a;
+  font-size: 13px;
+}
+
+.ingredient-comparison-source summary {
+  cursor: pointer;
+  color: #405b47;
+  font-weight: 700;
+}
+
+.ingredient-comparison-source h3 {
+  margin: 12px 0 4px;
+  font-size: 13px;
+}
+
+.ingredient-comparison-source p {
+  margin: 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.ingredient-analysis-results__heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.ingredient-analysis-results__heading h2 {
+  margin: 5px 0 0;
+  color: #35463a;
+  font-size: 22px;
+}
+
+.ingredient-analysis-results__heading time {
+  color: #748078;
+  font-size: 12px;
+}
+
+.ingredient-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ingredient-summary-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 15px;
+  border: 1px solid #e5ebe5;
+  border-radius: 10px;
+  background: white;
+}
+
+.ingredient-summary-grid strong {
+  color: #405b47;
+  font-size: 21px;
+}
+
+.ingredient-summary-grid span {
+  color: #748078;
+  font-size: 12px;
+}
+
+.ingredient-goal-context {
+  margin: 16px 0;
+  padding: 13px 15px;
+  border-left: 3px solid var(--sage);
+  background: #f3f6f2;
+  color: #46564b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ingredient-results-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.ingredient-result-card {
+  min-width: 0;
+  padding: 19px;
+  border: 1px solid #e5ebe5;
+  border-radius: 12px;
+  background: white;
+}
+
+.ingredient-result-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.ingredient-result-card__header h3 {
+  margin: 0;
+  color: #35463a;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.ingredient-result-card__parent {
+  margin: 0 0 5px;
+  color: #87928a;
+  font-size: 11px;
+}
+
+.ingredient-label {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #edf2ed;
+  color: #405b47;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.ingredient-label--unclassified {
+  background: #f4f1e9;
+  color: #75643c;
+}
+
+.ingredient-evidence {
+  margin: 10px 0 0;
+  color: #758078;
+  font-size: 11px;
+}
+
+.ingredient-facts {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 0;
+}
+
+.ingredient-facts > div {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.3fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.ingredient-facts dt {
+  color: #64746a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ingredient-facts dd {
+  margin: 0;
+  color: #58675d;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ingredient-considerations,
+.ingredient-references {
+  margin-top: 17px;
+  padding-top: 14px;
+  border-top: 1px solid #edf0ed;
+}
+
+.ingredient-considerations h4,
+.ingredient-references h4 {
+  margin: 0 0 9px;
+  color: #405046;
+  font-size: 12px;
+}
+
+.ingredient-consideration {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.25fr) minmax(0, 1fr);
+  gap: 10px;
+  margin: 7px 0 0;
+  padding: 10px 11px;
+  border-radius: 8px;
+  background: #f4f6f3;
+  color: #526056;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.ingredient-consideration--conflict {
+  background: #fbf3ed;
+  color: #75543c;
+}
+
+.ingredient-consideration--verify {
+  background: #fff9ed;
+  color: #74623a;
+}
+
+.ingredient-references ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 11px;
+}
+
+.ingredient-disclaimer {
+  margin-top: 20px;
 }
 
 .product-detail-heading {
@@ -2174,12 +2973,51 @@ a {
   .scan-review__heading {
     display: grid;
   }
+
+  .ingredients-panel__heading,
+  .ingredient-analysis-results__heading,
+  .food-claims-results__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 440px) {
   .profile-fields--two,
-  .preference-grid {
+  .preference-grid,
+  .food-claim-summary {
     grid-template-columns: 1fr;
+  }
+
+  .bmi-category-guide {
+    padding: 12px;
+  }
+
+  .bmi-category-guide__row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .bmi-category-guide__badge {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+
+  @media (max-width: 640px) {
+    .ingredient-comparison-selectors,
+    .ingredient-comparison-dates,
+    .ingredient-comparison-grid,
+    .food-claim-history li {
+      grid-template-columns: 1fr;
+    }
+
+    .ingredient-field-changes li {
+      grid-template-columns: 1fr;
+      gap: 3px;
+    }
+
+    .ingredients-panel__actions {
+      width: 100%;
+    }
   }
 
   .profile-form {
@@ -2260,6 +3098,16 @@ a {
   .entry-fields--identity,
   .entry-fields--nutrients {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ingredient-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ingredient-facts > div,
+  .ingredient-consideration {
+    grid-template-columns: 1fr;
+    gap: 5px;
   }
 
   .entry-fields--identity .field:first-child {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as authApi from '../api/auth.js';
+import { ADULT_BMI_CATEGORIES, getBmiCategoryLabel } from '../utils/bmi.js';
 
 const INITIAL_FORM = {
   age: '',
@@ -60,6 +61,8 @@ function updateFormFromProfile(profile) {
 function BmiIndicator({ bmi }) {
   const position = Math.max(0, Math.min(100, ((bmi.value - 12) / 28) * 100));
   const adultCategories = bmi.category !== 'not_classified';
+  const categoryLabel = getBmiCategoryLabel(bmi.category) || bmi.label;
+  const currentCategory = ADULT_BMI_CATEGORIES.find((item) => item.key === bmi.category);
 
   return (
     <section className="result-card" aria-label="BMI result">
@@ -69,7 +72,7 @@ function BmiIndicator({ bmi }) {
           <div className="bmi-value">{bmi.value}</div>
         </div>
         <span className={`bmi-tag${adultCategories ? '' : ' bmi-tag--neutral'}`}>
-          {bmi.label}
+          {categoryLabel}
         </span>
       </div>
       <div
@@ -77,7 +80,7 @@ function BmiIndicator({ bmi }) {
         role="img"
         aria-label={
           adultCategories
-            ? `BMI ${bmi.value}: ${bmi.label}`
+            ? `BMI ${bmi.value}: ${categoryLabel}`
             : `BMI ${bmi.value}; adult categories do not apply`
         }
       >
@@ -98,6 +101,35 @@ function BmiIndicator({ bmi }) {
           <p className="bmi-scale__minor-note">Adult BMI cutoffs are not shown</p>
         )}
       </div>
+      {adultCategories && currentCategory && (
+        <section className="bmi-category-guide" aria-label="Adult BMI categories">
+          <h3>Adult BMI categories</h3>
+          <p className="bmi-category-guide__current">
+            Your BMI of {bmi.value} is in the <strong>{currentCategory.label}</strong> category
+            ({currentCategory.range}).
+          </p>
+          <ul>
+            {ADULT_BMI_CATEGORIES.map((item) => {
+              const isCurrent = item.key === bmi.category;
+              return (
+                <li
+                  aria-current={isCurrent ? 'true' : undefined}
+                  className={
+                    isCurrent
+                      ? 'bmi-category-guide__row bmi-category-guide__row--current'
+                      : 'bmi-category-guide__row'
+                  }
+                  key={item.key}
+                >
+                  <span>{item.range}</span>
+                  <strong>{item.label}</strong>
+                  {isCurrent && <span className="bmi-category-guide__badge">Your category</span>}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
       {!adultCategories && (
         <p className="result-note">
           BMI is shown for reference only. Adult BMI categories are not used for people under 18.

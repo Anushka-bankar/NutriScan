@@ -5,23 +5,9 @@ import {
   importOcrProduct,
   lookupBarcode,
 } from '../api/products.js';
+import ProductReviewForm from '../components/ProductReviewForm.jsx';
+import { cameraErrorMessage, isSupportedBarcode } from '../utils/barcodeScanner.js';
 import { parseNutritionLabel } from '../utils/labelParser.js';
-
-const CATEGORIES = [
-  ['grains_cereals', 'Grains & cereals'],
-  ['snacks', 'Snacks'],
-  ['beverages', 'Beverages'],
-  ['dairy', 'Dairy'],
-  ['dairy_alternatives', 'Dairy alternatives'],
-  ['meat_poultry', 'Meat & poultry'],
-  ['seafood', 'Seafood'],
-  ['plant_protein', 'Plant proteins'],
-  ['fruits_vegetables', 'Fruits & vegetables'],
-  ['condiments_sauces', 'Condiments & sauces'],
-  ['prepared_meals', 'Prepared meals'],
-  ['bakery', 'Bakery'],
-  ['other', 'Other'],
-];
 
 const NUTRIENTS = [
   ['energy_kj', 'Energy', 'kJ', 3766, 1],
@@ -58,19 +44,19 @@ function messageFrom(error, fallback) {
   return error.response?.data?.message || fallback;
 }
 
-function displayNumber(value, unit) {
-  return value == null ? 'Unavailable' : `${value} ${unit}`;
-}
-
 export default function ProductScanPage() {
   const navigate = useNavigate();
   const videoRef = useRef(null);
   const [mode, setMode] = useState('barcode');
   const [barcode, setBarcode] = useState('');
-  const [barcodeProduct, setBarcodeProduct] = useState(null);
-  const [category, setCategory] = useState('');
+  const [existingBarcodeProduct, setExistingBarcodeProduct] = useState(null);
   const [ocrForm, setOcrForm] = useState(EMPTY_OCR);
+  const [reviewSource, setReviewSource] = useState(null);
+  const [reviewMetadata, setReviewMetadata] = useState({});
   const [recognizedText, setRecognizedText] = useState('');
+  const [ocrWarnings, setOcrWarnings] = useState([]);
+  const [uncertainFields, setUncertainFields] = useState([]);
+  const [reviewConfirmed, setReviewConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -79,22 +65,74 @@ export default function ProductScanPage() {
 
   const findBarcode = useCallback(async (value) => {
     const code = value.trim();
-    if (!/^(?:\d{8}|\d{12,14})$/.test(code)) {
-      setError('Barcode should contain 8, 12, 13, or 14 digits.');
+    if (!isSupportedBarcode(code)) {
+      setError('Enter an EAN-13, EAN-8, or UPC-A barcode (13, 8, or 12 digits).');
       return;
     }
     setLoading(true);
     setError('');
     setStatus('');
-    setBarcodeProduct(null);
+    setReviewSource(null);
+    setExistingBarcodeProduct(null);
     try {
       const { data } = await lookupBarcode(code);
-      setBarcodeProduct(data.product);
-      setCategory(data.product.category || 'other');
+      if (data.existing_product) {
+        setExistingBarcodeProduct(data.existing_product);
+        setBarcode(code);
+        setStatus('This barcode is already saved in your product library.');
+        return;
+      }
+      const product = data.product;
+      const formValues = {
+        ...EMPTY_OCR,
+        ...product,
+        serving_size_g: product.serving_size_g == null ? '' : String(product.serving_size_g),
+        basis: '100g',
+        ...Object.fromEntries(
+          NUTRIENTS.map(([field]) => [
+            field,
+            product[field] == null ? '' : String(product[field]),
+          ]),
+        ),
+      };
+      const missing = [];
+      const uncertain = [];
+      for (const [field, label] of [
+        ['name', 'Product name'],
+        ['brand', 'Brand'],
+        ['category', 'Category'],
+        ['ingredients', 'Ingredients'],
+        ['serving_size_g', 'Serving size'],
+        ...NUTRIENTS.map(([field, label]) => [field, label]),
+      ]) {
+        if (formValues[field] === '' || formValues[field] == null) {
+          missing.push(`${label} is not available in Open Food Facts.`);
+          uncertain.push(field);
+        }
+      }
+      if (formValues.category === 'other') {
+        missing.push('Category could not be matched confidently; choose the closest category.');
+        uncertain.push('category');
+      }
+      const servingSize = Number(formValues.serving_size_g);
+      if (formValues.serving_size_g !== '' && (servingSize < 1 || servingSize > 1000)) {
+        missing.push('Serving size looks unusual; verify it against the package.');
+        uncertain.push('serving_size_g');
+      }
+      setOcrForm(formValues);
+      setReviewSource('open_food_facts');
+      setReviewMetadata({
+        sourceLabel: product.source_label,
+        imageUrl: product.image_url,
+      });
+      setOcrWarnings(missing);
+      setUncertainFields(uncertain);
+      setReviewConfirmed(missing.length === 0);
       setBarcode(code);
-      setStatus('Review the product details and package values before saving.');
+      setStatus('Product details were found. Review and edit the imported information before saving.');
     } catch (requestError) {
-      setError(messageFrom(requestError, 'Barcode lookup failed. Try the label scan instead.'));
+      setError(requestError.response?.data?.message
+        || 'Could not reach the product database. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -105,25 +143,40 @@ export default function ProductScanPage() {
     let active = true;
     let controls;
     async function startCameraReader() {
-      const { BrowserMultiFormatReader } = await import('@zxing/browser');
+      if (!window.isSecureContext) {
+        setCameraActive(false);
+        setError(cameraErrorMessage('SecurityError'));
+        return;
+      }
+      const { BarcodeFormat, BrowserMultiFormatReader } = await import('@zxing/browser');
       if (!active) return;
       const reader = new BrowserMultiFormatReader();
+      reader.possibleFormats = [
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.UPC_A,
+      ];
       controls = await reader.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
         if (!result || !active) return;
+        const code = result.getText();
+        const format = BarcodeFormat[result.getBarcodeFormat()];
+        if (!isSupportedBarcode(code, format)) {
+          setError('This barcode format is not supported. Use EAN-13, EAN-8, or UPC-A.');
+          return;
+        }
         active = false;
         controls?.stop();
         setCameraActive(false);
-        const scanned = result.getText();
-        setBarcode(scanned);
-        findBarcode(scanned);
+        setBarcode(code);
+        findBarcode(code);
       });
       if (!active) controls.stop();
     }
 
-    startCameraReader().catch(() => {
+    startCameraReader().catch((cameraError) => {
       if (active) {
         setCameraActive(false);
-        setError('Could not access the camera. Allow camera permission or enter the barcode below.');
+        setError(cameraErrorMessage(cameraError.name));
       }
     });
 
@@ -166,17 +219,26 @@ export default function ProductScanPage() {
           setStatus('');
           return;
         }
-        const extracted = parseNutritionLabel(data.text);
+        const extracted = parseNutritionLabel(data.text, { confidence: data.confidence });
+        const {
+          warnings,
+          uncertainFields: uncertain,
+          ...formValues
+        } = extracted;
         setRecognizedText(data.text);
-        setOcrForm((current) => ({
+        setOcrForm({
           ...EMPTY_OCR,
-          name: current.name,
-          brand: current.brand,
-          barcode: current.barcode,
-          category: current.category,
-          ...extracted,
-        }));
-        setStatus('Review the extracted details. Values may need correction if the photo is unclear.');
+          ...formValues,
+        });
+        setReviewSource('label_ocr');
+        setReviewMetadata({
+          sourceLabel: 'OCR-extracted from package; user-reviewed, not independently verified',
+          imageUrl: null,
+        });
+        setOcrWarnings(warnings);
+        setUncertainFields(uncertain);
+        setReviewConfirmed(false);
+        setStatus('Extracted fields have been populated. Review highlighted items and confirm before saving.');
       } finally {
         await worker.terminate();
       }
@@ -188,30 +250,14 @@ export default function ProductScanPage() {
     }
   }
 
-  async function saveBarcodeProduct() {
-    if (!category) {
-      setError('Choose the matching food category before saving.');
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      const { data } = await importBarcodeProduct({ barcode, category });
-      navigate(`/products/${data.product.id}`, { replace: true });
-    } catch (requestError) {
-      setError(messageFrom(requestError, 'Could not save product. Please try again.'));
-    } finally {
-      setLoading(false);
-    }
-  }
-
   function updateOcr(event) {
     const { name, value } = event.target;
     setOcrForm((current) => ({ ...current, [name]: value }));
+    setReviewConfirmed(false);
     setError('');
   }
 
-  async function saveOcrProduct(event) {
+  async function saveProduct(event) {
     event.preventDefault();
     if (!ocrForm.name.trim()) {
       setError('Enter the product name so you can find it in your library.');
@@ -221,16 +267,41 @@ export default function ProductScanPage() {
       setError('Choose a food category before saving.');
       return;
     }
-    if (!NUTRIENTS.some(([field]) => ocrForm[field] !== '')) {
+    if (ocrForm.brand.length > 120) {
+      setError('Brand must be at most 120 characters.');
+      return;
+    }
+    if (reviewSource === 'label_ocr' && !NUTRIENTS.some(([field]) => ocrForm[field] !== '')) {
       setError('No nutrition facts were detected. Try a clearer label photo.');
       return;
     }
-    const servingSize = Number(ocrForm.serving_size_g);
+    const servingSize = ocrForm.serving_size_g === ''
+      ? null
+      : Number(ocrForm.serving_size_g);
+    if (servingSize !== null && (
+      !Number.isFinite(servingSize)
+      || servingSize <= 0
+      || servingSize > 5000
+    )) {
+      setError('Serving size must be greater than 0 and no more than 5000 g.');
+      return;
+    }
     if (
       ocrForm.basis === 'serving' &&
-      (!Number.isFinite(servingSize) || servingSize <= 0)
+      (servingSize === null || servingSize <= 0)
     ) {
       setError('Enter the serving size in grams to convert per-serving facts to per 100 g.');
+      return;
+    }
+    if (servingSize !== null && (servingSize < 1 || servingSize > 1000)
+      && !uncertainFields.includes('serving_size_g')) {
+      setUncertainFields((current) => [...current, 'serving_size_g']);
+      setOcrWarnings((current) => [
+        ...current,
+        'Serving size looks unusual; verify it against the package.',
+      ]);
+      setReviewConfirmed(false);
+      setError('Serving size looks unusual. Verify the amount, then confirm the review checkbox.');
       return;
     }
 
@@ -259,6 +330,10 @@ export default function ProductScanPage() {
       setError('Extracted saturated fat is greater than total fat. Check the recognized label values.');
       return;
     }
+    if (ocrWarnings.length > 0 && !reviewConfirmed) {
+      setError('Review the highlighted scan results and confirm the review checkbox before saving.');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -266,14 +341,27 @@ export default function ProductScanPage() {
       const payload = {
         name: ocrForm.name.trim(),
         brand: ocrForm.brand.trim() || null,
-        barcode: ocrForm.barcode.trim() || null,
+        barcode: reviewSource === 'open_food_facts'
+          ? barcode
+          : ocrForm.barcode.trim() || null,
         ingredients: ocrForm.ingredients.trim() || null,
+        packaging_text: reviewSource === 'label_ocr'
+          ? recognizedText.slice(0, 20000)
+          : null,
+        image_url: reviewSource === 'open_food_facts' ? reviewMetadata.imageUrl : null,
         category: ocrForm.category,
         dietary_tags: [],
-        serving_size_g: ocrForm.serving_size_g ? servingSize : null,
+        serving_size_g: servingSize,
+        review_confirmed: reviewConfirmed,
         ...facts,
       };
-      const { data } = await importOcrProduct(payload);
+      const { data } = reviewSource === 'open_food_facts'
+        ? await importBarcodeProduct({
+          barcode,
+          category: ocrForm.category,
+          reviewed_product: payload,
+        })
+        : await importOcrProduct(payload);
       navigate(`/products/${data.product.id}`, { replace: true });
     } catch (requestError) {
       setError(messageFrom(requestError, 'Could not save product. Please try again.'));
@@ -303,7 +391,7 @@ export default function ProductScanPage() {
           <button
             aria-selected={mode === 'barcode'}
             className={mode === 'barcode' ? 'is-selected' : ''}
-            onClick={() => { setMode('barcode'); setError(''); }}
+            onClick={() => { setMode('barcode'); setReviewSource(null); setError(''); }}
             role="tab"
             type="button"
           >
@@ -312,7 +400,7 @@ export default function ProductScanPage() {
           <button
             aria-selected={mode === 'label'}
             className={mode === 'label' ? 'is-selected' : ''}
-            onClick={() => { setMode('label'); setError(''); setCameraActive(false); }}
+            onClick={() => { setMode('label'); setReviewSource(null); setError(''); setCameraActive(false); }}
             role="tab"
             type="button"
           >
@@ -339,8 +427,13 @@ export default function ProductScanPage() {
                 id="barcode-input"
                 inputMode="numeric"
                 maxLength="14"
-                onChange={(event) => setBarcode(event.target.value.replace(/\D/g, ''))}
-                placeholder="Scan or enter 8–14 barcode digits"
+                onChange={(event) => {
+                  setBarcode(event.target.value.replace(/\D/g, ''));
+                  setExistingBarcodeProduct(null);
+                  setReviewSource(null);
+                  setStatus('');
+                }}
+                placeholder="Scan or enter EAN-13, EAN-8, or UPC-A"
                 value={barcode}
               />
               <button className="button button--primary" disabled={loading} type="submit">
@@ -364,53 +457,16 @@ export default function ProductScanPage() {
             </div>
             {cameraActive && <video className="barcode-video" muted playsInline ref={videoRef} />}
 
-            {barcodeProduct && (
-              <div className="scan-review">
-                <div className="scan-review__heading">
-                  <div>
-                    <p className="eyebrow">Review before saving</p>
-                    <h2>{barcodeProduct.name}</h2>
-                    <p>{barcodeProduct.brand || 'Brand not listed'} · Barcode {barcodeProduct.barcode}</p>
-                  </div>
-                  <span className="source-badge">{barcodeProduct.source_label}</span>
-                </div>
-                <p className="scan-panel__hint">
-                  Source: <a href={`https://world.openfoodfacts.org/product/${encodeURIComponent(barcodeProduct.barcode)}`} rel="noreferrer" target="_blank">Open Food Facts (ODbL)</a>
-                </p>
-                <label className="field scan-category">
-                  <span>Food category</span>
-                  <select onChange={(event) => setCategory(event.target.value)} value={category}>
-                    {CATEGORIES.map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                </label>
-                <h3>Nutrition per 100 g</h3>
-                <div className="scan-nutrient-grid">
-                  {NUTRIENTS.map(([field, label, unit]) => (
-                    <div className="scan-nutrient" key={field}>
-                      <span>{label}</span>
-                      <strong>{displayNumber(barcodeProduct[field], unit)}</strong>
-                    </div>
-                  ))}
-                </div>
-                {barcodeProduct.serving_size_g && (
-                  <p className="scan-panel__hint">
-                    Database serving: {barcodeProduct.serving_size_g} g. Per-serving amounts will be calculated from the per-100 g values.
-                  </p>
-                )}
-                {barcodeProduct.ingredients && (
-                  <div className="scan-ingredients">
-                    <h3>Ingredients</h3>
-                    <p>{barcodeProduct.ingredients}</p>
-                  </div>
-                )}
-                <p className="result-note">
-                  Values and ingredients are community-contributed; some may be incomplete or inaccurate.
-                  NutriScan will fetch these barcode details again when you confirm.
-                </p>
-                <button className="button button--primary entry-submit" disabled={loading} onClick={saveBarcodeProduct} type="button">
-                  {loading ? 'Saving product...' : 'Confirm and save product'}
+            {existingBarcodeProduct && (
+              <div className="product-state product-state--empty">
+                <h2>Already in your library</h2>
+                <p>{existingBarcodeProduct.name}{existingBarcodeProduct.brand ? ` · ${existingBarcodeProduct.brand}` : ''}</p>
+                <button
+                  className="button button--primary"
+                  onClick={() => navigate(`/products/${existingBarcodeProduct.id}`)}
+                  type="button"
+                >
+                  Open saved product
                 </button>
               </div>
             )}
@@ -440,85 +496,32 @@ export default function ProductScanPage() {
               </details>
             )}
 
-            {recognizedText && (
-              <form className="product-entry-form scan-review" onSubmit={saveOcrProduct} noValidate>
-                <div className="scan-review__heading">
-                  <div>
-                    <p className="eyebrow">Review extracted information</p>
-                    <h2>Confirm the package details</h2>
-                    <p>OCR can misread small text. Check the values against the photo; you can correct any extraction before saving.</p>
-                  </div>
-                </div>
-                <div className="data-warning" role="note">
-                  <strong>Image stays on this device</strong>
-                  <span>Only the product details you confirm are sent to NutriScan. OCR data is not independently verified.</span>
-                </div>
-                <div className="entry-fields entry-fields--identity scan-identity">
-                  <label className="field">
-                    <span>Product name</span>
-                    <input maxLength="160" name="name" onChange={updateOcr} required value={ocrForm.name} />
-                  </label>
-                  <label className="field">
-                    <span>Brand <em>Optional</em></span>
-                    <input maxLength="120" name="brand" onChange={updateOcr} value={ocrForm.brand} />
-                  </label>
-                  <label className="field">
-                    <span>Food category</span>
-                    <select name="category" onChange={updateOcr} value={ocrForm.category}>
-                      <option value="">Select a category</option>
-                      {CATEGORIES.map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Serving size <em>Optional</em></span>
-                    <div className="input-with-unit">
-                      <input max="5000" min="0.01" name="serving_size_g" onChange={updateOcr} step="0.01" type="number" value={ocrForm.serving_size_g} />
-                      <span>g</span>
-                    </div>
-                  </label>
-                  <label className="field">
-                    <span>Barcode <em>Optional</em></span>
-                    <input inputMode="numeric" maxLength="14" name="barcode" onChange={(event) => setOcrForm((current) => ({ ...current, barcode: event.target.value.replace(/\D/g, '') }))} value={ocrForm.barcode} />
-                  </label>
-                  <label className="field scan-basis">
-                    <span>Nutrition values shown</span>
-                    <select name="basis" onChange={updateOcr} value={ocrForm.basis}>
-                      <option value="100g">Per 100 g</option>
-                      <option value="serving">Per serving</option>
-                    </select>
-                  </label>
-                </div>
-
-                <label className="field scan-ingredients-field">
-                  <span>Ingredients <em>Optional</em></span>
-                  <textarea maxLength="10000" name="ingredients" onChange={updateOcr} rows="4" value={ocrForm.ingredients} />
-                </label>
-
-                <h3 className="entry-section-title">Recognized nutrition values</h3>
-                <p className="entry-help">
-                  {ocrForm.basis === 'serving'
-                    ? 'Confirm the serving size above. Values will be converted to per 100 g before saving.'
-                    : 'Values are saved per 100 g. Missing values remain unavailable, not zero.'}
-                </p>
-                <div className="entry-fields entry-fields--nutrients">
-                  {NUTRIENTS.map(([name, label, unit, max, step]) => (
-                    <label className="field" key={name}>
-                      <span>{label} <small>({unit})</small></span>
-                      <input max={max} min="0" name={name} onChange={updateOcr} step={step} type="number" value={ocrForm[name]} />
-                    </label>
-                  ))}
-                </div>
-                {error && <p className="form-message form-message--error" role="alert">{error}</p>}
-                <button className="button button--primary entry-submit" disabled={loading} type="submit">
-                  {loading ? 'Saving product...' : 'Confirm and save nutrition'}
-                </button>
-              </form>
-            )}
           </section>
         )}
 
+        {reviewSource && (
+          <>
+            {reviewSource === 'open_food_facts' && (
+              <p className="scan-panel__hint">
+                Source: <a href={`https://world.openfoodfacts.org/product/${encodeURIComponent(barcode)}`} rel="noreferrer" target="_blank">Open Food Facts (ODbL)</a>
+              </p>
+            )}
+            <ProductReviewForm
+              error={error}
+              form={ocrForm}
+              imageUrl={reviewMetadata.imageUrl}
+              loading={loading}
+              onChange={updateOcr}
+              onReviewConfirmed={setReviewConfirmed}
+              onSubmit={saveProduct}
+              reviewConfirmed={reviewConfirmed}
+              sourceLabel={reviewMetadata.sourceLabel}
+              sourceType={reviewSource}
+              uncertainFields={uncertainFields}
+              warnings={ocrWarnings}
+            />
+          </>
+        )}
         {error && <p className="form-message form-message--error" role="alert">{error}</p>}
         {status && <p className="form-message form-message--success" role="status">{status}</p>}
         <p className="scan-manual-link">

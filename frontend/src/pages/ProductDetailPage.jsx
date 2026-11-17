@@ -448,13 +448,37 @@ export default function ProductDetailPage() {
                 <MacroChart nutrition={product.nutrition_per_100g} />
               </section>
             </div>
-            {product.ingredients && (
-              <section className="ingredients-panel">
+            <section className="ingredients-panel">
+              <div className="ingredients-panel__heading">
+                <div>
                 <p className="eyebrow">Package ingredients</p>
                 <h2>Ingredients</h2>
-                <p>{product.ingredients}</p>
-              </section>
-            )}
+                {product.ingredients
+                  ? <p>{product.ingredients}</p>
+                  : <p>No ingredient list is saved yet. You can enter one for analysis.</p>}
+                </div>
+                <div className="ingredients-panel__actions">
+                  <Link
+                    className="button button--outline"
+                    to={`/products/${product.id}/ingredients`}
+                  >
+                    Analyze ingredients
+                  </Link>
+                  <Link
+                    className="button button--quiet"
+                    to={`/ingredient-history?productId=${product.id}`}
+                  >
+                    Compare saved analyses
+                  </Link>
+                  <Link
+                    className="button button--outline"
+                    to={`/products/${product.id}/claims`}
+                  >
+                    Check packaging claims
+                  </Link>
+                </div>
+              </div>
+            </section>
             <section className="classification-panel">
               <div>
                 <p className="eyebrow">Help find comparable foods</p>

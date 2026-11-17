@@ -48,12 +48,16 @@ def create_app(test_config=None):
     from app import models  # noqa: F401
     from app.auth import auth_bp
     from app.health_profile import health_profile_bp
+    from app.food_claims import food_claims_bp
+    from app.ingredient_analysis import ingredient_analysis_bp
     from app.product_activity import activity_bp
     from app.products import products_bp
     from app.recommendations import recommendations_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(health_profile_bp, url_prefix="/api/profile")
+    app.register_blueprint(ingredient_analysis_bp, url_prefix="/api/products")
+    app.register_blueprint(food_claims_bp, url_prefix="/api/products")
     app.register_blueprint(activity_bp, url_prefix="/api")
     app.register_blueprint(products_bp, url_prefix="/api/products")
     app.register_blueprint(recommendations_bp, url_prefix="/api/products")
